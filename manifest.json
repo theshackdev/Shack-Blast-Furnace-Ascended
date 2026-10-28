@@ -1,0 +1,10 @@
+{
+  "name": "Shack_Blast_Furnace_Ascended",
+  "version_number": "1.0.0",
+  "website_url": "https://github.com/theshackdev/Shack-Blast-Furnace-Ascended",
+  "description": "The blast furnace smelts copper, tin, scrap iron and silver too, four times as fast as the regular furnace for the same coal. Admin settings for the ores, speed, coal and capacity. The server and every player need it.",
+  "dependencies": [
+    "denikson-BepInExPack_Valheim-5.4.2351",
+    "ValheimModding-Jotunn-2.30.2"
+  ]
+}
