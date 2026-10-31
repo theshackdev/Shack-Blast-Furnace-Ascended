@@ -33,7 +33,7 @@ namespace TheShack.BlastFurnace
     {
         public const string PluginGuid = "theshack.blastfurnace";
         public const string PluginName = "Shack Blast Furnace Ascended";
-        public const string PluginVersion = "1.0.0";
+        public const string PluginVersion = "1.0.1";
 
         internal static ManualLogSource Log;
 
@@ -73,6 +73,7 @@ namespace TheShack.BlastFurnace
         public static ConfigEntry<float> Coal;
         public static ConfigEntry<int> OreCapacity;
         public static ConfigEntry<int> CoalCapacity;
+        public static ConfigEntry<bool> OneRefund;
 
         // The regular furnace's ores the blast furnace may take, by the item's prefab name.
         public static readonly Dictionary<string, ConfigEntry<bool>> Ores = new Dictionary<string, ConfigEntry<bool>>();
@@ -106,6 +107,12 @@ namespace TheShack.BlastFurnace
             Ores["TinOre"] = Bind("2 - Ores", "Tin ore", true, "The blast furnace smelts tin ore into tin.");
             Ores["IronScrap"] = Bind("2 - Ores", "Scrap iron", true, "The blast furnace smelts scrap iron into iron.");
             Ores["SilverOre"] = Bind("2 - Ores", "Silver ore", true, "The blast furnace smelts silver ore into silver.");
+
+            OneRefund = Bind("3 - Compatibility", "One refund per rejected item", true,
+                "With No Lossy Cooking Stations and ValheimCommunityPatch both installed, an item that reaches a busy " +
+                "fermenter or a full cooking station is handed back once, by VCP (\"Refund Rejected Station Items\"). " +
+                "Off: No Lossy hands it back too, so a busy fermenter gives two. Does nothing without both mods, or while " +
+                "VCP's refund is off.");
         }
     }
 
@@ -220,7 +227,11 @@ namespace TheShack.BlastFurnace
     [HarmonyPatch(typeof(ZNetScene), "Awake")]
     internal static class ZNetScene_Awake
     {
-        private static void Postfix() => Furnaces.LogRates();
+        private static void Postfix()
+        {
+            Furnaces.LogRates();
+            StationRefunds.Hook();
+        }
     }
 
     // After the game's own Awake (and other mods' prefixes, such as OttoFuel's "Blast Furnace takes all ore"), so the

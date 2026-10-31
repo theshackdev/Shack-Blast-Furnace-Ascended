@@ -2,7 +2,7 @@
 
 # Shack Blast Furnace Ascended
 
-**[Download on Thunderstore](https://thunderstore.io/c/valheim/p/TheShackDev/Shack_Blast_Furnace_Ascended/)** · version 1.0.0
+**[Download on Thunderstore](https://thunderstore.io/c/valheim/p/TheShackDev/Shack_Blast_Furnace_Ascended/)** · version 1.0.1
 
 **The blast furnace smelts copper, tin, scrap iron and silver too, four times as fast as the regular furnace.** In the base game the blast furnace only takes black metal scrap and flametal ore. This mod lets it take the regular furnace's ores as well, and makes it the fast way to smelt them.
 
@@ -28,6 +28,11 @@ Admin-only, and synced from the server:
 | Ore capacity | 0 | How much ore the blast furnace holds, all kinds together. 0 = the game's own. |
 | Coal capacity | 0 | How much coal it holds. 0 = the game's own. |
 | Copper ore, Tin ore, Scrap iron, Silver ore | true | Which of the regular furnace's ores the blast furnace takes. |
+| One refund per rejected item | true | See "With No Lossy Cooking Stations" below. Off: both mods hand the item back. |
+
+## With No Lossy Cooking Stations and ValheimCommunityPatch
+
+Both mods hand an item back when it reaches a fermenter that's already busy, or a cooking station that's already full (two players loading it at once). With both installed, a busy fermenter gave two items for one. This mod has No Lossy step aside for those two while VCP's "Refund Rejected Station Items" is on, so the item comes back once. The rest of No Lossy stays as it is. Without both mods, or with VCP's refund off, it does nothing.
 
 ## Multiplayer
 
@@ -48,7 +53,7 @@ dotnet build -c Release \
 
 `ProfileRoot` is the `BepInEx` folder of any r2modman profile that has Jotunn (it needs `core/` and `plugins/ValheimModding-Jotunn/`). Without the `-p:` options the project looks for a Linux Steam install and an r2modman profile named "The Shack Next". The DLL lands in `bin/Release/`.
 
-This is the source of version 1.0.0 on Thunderstore.
+This is the source of version 1.0.1 on Thunderstore.
 
 ## License
 
