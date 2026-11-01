@@ -13,14 +13,15 @@ using UnityEngine;
 
 namespace TheShack.BlastFurnace
 {
-    // The blast furnace also takes the regular furnace's ores (copper ore, tin ore, scrap iron, silver ore) and smelts
-    // them faster than the regular furnace does. Black metal and flametal stay exactly as they were.
+    // The blast furnace also takes every ore the regular furnace takes (copper ore, tin ore, scrap iron, silver ore,
+    // copper scrap, scrap bronze, and any a game update or another mod adds to it) and smelts them faster than the
+    // regular furnace does. Black metal, flametal and the blast furnace's other ores stay exactly as they were.
     //
     //   - What a furnace takes is its m_conversion list, which every furnace copies from its prefab when it loads. The
     //     mod adds the regular furnace's own conversions for those ores to each blast furnace as it loads, and again to
     //     the loaded ones whenever a setting changes (also when the server's settings arrive). The game checks that list
     //     on the PC of the player adding ore and on the PC that runs the furnace, which is why everyone needs the mod
-    //     (Jotunn makes sure).
+    //     (Jotunn makes sure). The list of ores is read from the regular furnace itself, so nothing is left out.
     //   - A furnace smelts one ore every m_secPerProduct seconds and burns m_fuelPerProduct coal over that time, the same
     //     for everything it takes. UpdateSmelter (run by whoever's game looks after the furnace) reads those two fields;
     //     the mod swaps them for calls that look at the ore at the front of the queue: the regular furnace's ores get the
@@ -33,7 +34,7 @@ namespace TheShack.BlastFurnace
     {
         public const string PluginGuid = "theshack.blastfurnace";
         public const string PluginName = "Shack Blast Furnace Ascended";
-        public const string PluginVersion = "1.0.1";
+        public const string PluginVersion = "1.1.0";
 
         internal static ManualLogSource Log;
 
@@ -75,8 +76,14 @@ namespace TheShack.BlastFurnace
         public static ConfigEntry<int> CoalCapacity;
         public static ConfigEntry<bool> OneRefund;
 
-        // The regular furnace's ores the blast furnace may take, by the item's prefab name.
+        // The regular furnace's ores with a setting of their own, by the item's prefab name. Any other ore it takes (the
+        // game's unused iron ore, or one a game update or another mod adds) goes by OtherOres.
         public static readonly Dictionary<string, ConfigEntry<bool>> Ores = new Dictionary<string, ConfigEntry<bool>>();
+        public static ConfigEntry<bool> OtherOres;
+
+        // Whether the blast furnace takes this one of the regular furnace's ores.
+        public static bool Ticked(string ore) =>
+            Ores.TryGetValue(ore, out ConfigEntry<bool> entry) ? entry.Value : OtherOres.Value;
 
         public static void Bind(ConfigFile config)
         {
@@ -107,6 +114,11 @@ namespace TheShack.BlastFurnace
             Ores["TinOre"] = Bind("2 - Ores", "Tin ore", true, "The blast furnace smelts tin ore into tin.");
             Ores["IronScrap"] = Bind("2 - Ores", "Scrap iron", true, "The blast furnace smelts scrap iron into iron.");
             Ores["SilverOre"] = Bind("2 - Ores", "Silver ore", true, "The blast furnace smelts silver ore into silver.");
+            Ores["CopperScrap"] = Bind("2 - Ores", "Copper scrap", true, "The blast furnace smelts copper scrap into copper.");
+            Ores["BronzeScrap"] = Bind("2 - Ores", "Scrap bronze", true, "The blast furnace smelts scrap bronze into bronze.");
+            OtherOres = Bind("2 - Ores", "Other ores", true,
+                "Any other ore the regular furnace takes: the game's unused iron ore, and any ore a game update or another " +
+                "mod adds to the regular furnace. The blast furnace smelts it into what the regular furnace makes.");
 
             OneRefund = Bind("3 - Compatibility", "One refund per rejected item", true,
                 "With No Lossy Cooking Stations and ValheimCommunityPatch both installed, an item that reaches a busy " +
@@ -147,15 +159,50 @@ namespace TheShack.BlastFurnace
             return cache;
         }
 
-        // The regular furnace's conversion for one of our ores, or null.
+        // The regular furnace's conversion for this ore, if it's one of the regular furnace's ores (one the blast furnace
+        // doesn't take by itself), whether it's ticked or not; otherwise null.
         public static Smelter.ItemConversion RegularConversion(string ore)
         {
-            Smelter smelter = Regular();
-            if (smelter == null || !Settings.Ores.ContainsKey(ore))
+            Smelter smelter = Regular(), blastPrefab = Blast();
+            if (smelter == null || blastPrefab == null || string.IsNullOrEmpty(ore) || Find(blastPrefab, ore) != null)
             {
                 return null;
             }
-            return smelter.m_conversion.Find(c => c.m_from != null && c.m_from.gameObject.name == ore);
+            return Find(smelter, ore);
+        }
+
+        // The first conversion of this ore in the furnace's list, as the game itself looks it up.
+        private static Smelter.ItemConversion Find(Smelter smelter, string ore)
+        {
+            foreach (Smelter.ItemConversion conversion in smelter.m_conversion)
+            {
+                if (conversion.m_from != null && conversion.m_from.gameObject.name == ore)
+                {
+                    return conversion;
+                }
+            }
+            return null;
+        }
+
+        // The prefab names of the regular furnace's ores, in its own order, each once.
+        public static List<string> RegularOres()
+        {
+            List<string> ores = new List<string>();
+            Smelter smelter = Regular();
+            if (smelter == null)
+            {
+                return ores;
+            }
+            foreach (Smelter.ItemConversion conversion in smelter.m_conversion)
+            {
+                string ore = conversion.m_from != null ? conversion.m_from.gameObject.name : null;
+                // RegularConversion gives the first entry for an ore, so a second entry for the same ore is skipped.
+                if (ore != null && RegularConversion(ore) == conversion)
+                {
+                    ores.Add(ore);
+                }
+            }
+            return ores;
         }
 
         public static void Apply(Smelter furnace)
@@ -165,15 +212,14 @@ namespace TheShack.BlastFurnace
             {
                 return;
             }
-            furnace.m_conversion.RemoveAll(c => c.m_from != null && Settings.Ores.ContainsKey(c.m_from.gameObject.name));
+            furnace.m_conversion.RemoveAll(c => c.m_from != null && RegularConversion(c.m_from.gameObject.name) != null);
             if (Settings.Enabled.Value)
             {
-                foreach (KeyValuePair<string, ConfigEntry<bool>> ore in Settings.Ores)
+                foreach (string ore in RegularOres())
                 {
-                    Smelter.ItemConversion conversion = RegularConversion(ore.Key);
-                    if (ore.Value.Value && conversion != null)
+                    if (Settings.Ticked(ore))
                     {
-                        furnace.m_conversion.Add(conversion);
+                        furnace.m_conversion.Add(RegularConversion(ore));
                     }
                 }
             }
@@ -202,7 +248,7 @@ namespace TheShack.BlastFurnace
 
         // An ore that was unticked while some was still in the furnace finishes at the same speed.
         public static bool IsFast(Smelter smelter) =>
-            Settings.Enabled.Value && IsBlastFurnace(smelter) && Regular() != null && Settings.Ores.ContainsKey(QueuedOre(smelter));
+            Settings.Enabled.Value && IsBlastFurnace(smelter) && RegularConversion(QueuedOre(smelter)) != null;
 
         public static void LogRates()
         {
@@ -219,8 +265,9 @@ namespace TheShack.BlastFurnace
             }
             Plugin.Log.LogInfo($"Regular furnace: {smelter.m_secPerProduct:0.#} s and {smelter.m_fuelPerProduct} coal per ore. " +
                 $"Blast furnace: {blastPrefab.m_secPerProduct:0.#} s and {blastPrefab.m_fuelPerProduct} coal per ore, holds " +
-                $"{blastPrefab.m_maxOre} ore and {blastPrefab.m_maxFuel} coal; the regular furnace's ores take " +
-                $"{smelter.m_secPerProduct / Settings.Speed.Value:0.##} s and {smelter.m_fuelPerProduct * Settings.Coal.Value:0.##} coal there.");
+                $"{blastPrefab.m_maxOre} ore and {blastPrefab.m_maxFuel} coal; the regular furnace's ores " +
+                $"({string.Join(", ", RegularOres())}) take {smelter.m_secPerProduct / Settings.Speed.Value:0.##} s and " +
+                $"{smelter.m_fuelPerProduct * Settings.Coal.Value:0.##} coal there.");
         }
     }
 
